@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cronpan</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%233dd68c'/><rect x='6' y='9' width='4' height='4' rx='1' fill='%230c0e14'/><rect x='14' y='9' width='4' height='4' rx='1' fill='%230c0e14'/><rect x='22' y='9' width='4' height='4' rx='1' fill='%230c0e14'/><rect x='6' y='17' width='4' height='4' rx='1' fill='%230c0e14'/><rect x='14' y='17' width='12' height='4' rx='1' fill='%230c0e14'/></svg>">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+:root {
+  --bg:#0c0e14;--surface:#11141a;--raised:#181c24;--border:#232830;--border2:#2e3540;
+  --text:#d4dbe8;--muted:#5a6478;--dim:#3a4455;
+  --green:#3dd68c;--green-bg:#3dd68c14;--red:#f25f5c;--red-bg:#f25f5c14;
+  --yellow:#f0a500;--yellow-bg:#f0a50014;--blue:#4a9eff;--blue-bg:#4a9eff14;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;line-height:1.5;}
+
+/* ── TOPBAR ── */
+#topbar{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:52px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;}
+#logo{display:flex;align-items:center;gap:10px;text-decoration:none;cursor:pointer;}
+#logo-mark{width:28px;height:28px;background:var(--green);border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:700;color:#0c0e14;letter-spacing:-0.02em;transition:transform 0.15s;}
+#logo:hover #logo-mark{transform:scale(1.08);}
+#logo-text{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--text);letter-spacing:0.04em;transition:color 0.15s;}
+#logo:hover #logo-text{color:var(--green);}
+#logo-version{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.06em;margin-left:2px;}
+#topbar-right{display:flex;align-items:center;gap:12px;}
+#refresh-btn{background:none;border:1px solid var(--border2);color:var(--muted);padding:0 12px;height:28px;border-radius:5px;cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:0.06em;transition:all 0.15s;}
+#refresh-btn:hover{border-color:var(--green);color:var(--green);}
+#last-refreshed{font-family:var(--mono);font-size:11px;color:var(--muted);}
+#tz-label{font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--border2);border-radius:5px;padding:0 12px;height:28px;letter-spacing:0.06em;display:inline-flex;align-items:center;}
+
+/* ── LAYOUT ── */
+#main{display:grid;grid-template-columns:1fr 36%;height:calc(100vh - 52px);}
+#jobs-panel{padding:24px;overflow-y:auto;border-right:1px solid var(--border);}
+#detail-panel{background:var(--surface);overflow-y:auto;display:flex;flex-direction:column;min-width:0;}
+
+/* ── SECTION HEADER ── */
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.section-title{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);}
+.job-count{font-family:var(--mono);font-size:11px;color:var(--dim);background:var(--raised);padding:2px 8px;border-radius:10px;}
+
+/* ── FILTER TABS ── */
+#filter-tabs{display:flex;gap:4px;margin-bottom:12px;}
+.filter-tab{font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:5px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;transition:all 0.12s;letter-spacing:0.04em;}
+.filter-tab:hover{border-color:var(--border2);color:var(--text);}
+.filter-tab.active{background:var(--raised);border-color:var(--border2);color:var(--text);}
+
+/* ── BULK BAR ── */
+#bulk-bar{display:none;align-items:center;gap:8px;padding:8px 0 12px;flex-wrap:wrap;}
+#bulk-bar.visible{display:flex;}
+#bulk-count{font-family:var(--mono);font-size:11px;color:var(--muted);margin-right:4px;}
+.bulk-btn{font-family:var(--mono);font-size:11px;padding:5px 12px;border-radius:5px;border:1px solid;cursor:pointer;background:none;transition:all 0.15s;}
+.bulk-btn-activate{color:var(--green);border-color:#3dd68c40;}.bulk-btn-activate:hover{background:var(--green-bg);border-color:var(--green);}
+.bulk-btn-deactivate{color:var(--yellow);border-color:#f0a50040;}.bulk-btn-deactivate:hover{background:var(--yellow-bg);border-color:var(--yellow);}
+.bulk-btn-delete{color:var(--red);border-color:#f25f5c40;}.bulk-btn-delete:hover{background:var(--red-bg);border-color:var(--red);}
+.bulk-btn-clear{color:var(--muted);border-color:var(--border2);}.bulk-btn-clear:hover{background:var(--raised);border-color:var(--dim);}
+
+/* ── JOB CARD ── */
+.job-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;transition:border-color 0.15s,background 0.15s;overflow:hidden;cursor:pointer;}
+.job-card:hover{border-color:var(--border2);background:var(--raised);}
+.job-card.selected{border-color:var(--blue);background:var(--raised);}
+.job-card-inner{padding:12px 14px;display:flex;align-items:center;gap:10px;}
+
+/* ── CUSTOM CHECKBOX ── */
+.job-checkbox{display:none;}
+.job-check-ui{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border2);background:transparent;flex-shrink:0;cursor:pointer;transition:all 0.15s;display:flex;align-items:center;justify-content:center;}
+.job-check-ui:hover{border-color:var(--blue);}
+.job-check-ui.checked{background:var(--blue);border-color:var(--blue);}
+.job-card:hover .job-check-ui{border-color:var(--dim);}
+
+.job-card-body{flex:1;min-width:0;display:flex;align-items:center;gap:10px;}
+.job-status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.status-active{background:var(--green);box-shadow:0 0 6px var(--green);}
+.status-disabled{background:var(--dim);}
+.status-running{background:var(--green);animation:pulse 1.2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{box-shadow:0 0 4px var(--green);}50%{box-shadow:0 0 12px var(--green);opacity:0.7;}}
+.job-main{flex:1;min-width:0;}
+.job-name{font-family:var(--sans);font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px;}
+.job-command{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.job-meta{display:flex;align-items:center;gap:6px;margin-top:5px;flex-wrap:wrap;}
+.tag{font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:4px;letter-spacing:0.04em;font-weight:500;}
+.tag-schedule{background:var(--raised);color:var(--dim);border:1px solid var(--border);}
+.tag-logging{background:var(--green-bg);color:var(--green);border:1px solid #3dd68c30;}
+.tag-nolog{background:var(--raised);color:var(--dim);border:1px solid var(--border);}
+.tag-complex{background:var(--yellow-bg);color:var(--yellow);border:1px solid #f0a50030;}
+.tag-running{background:var(--green-bg);color:var(--green);border:1px solid #3dd68c30;}
+.tag-disabled{background:var(--raised);color:var(--dim);border:1px solid var(--border);}
+
+/* ── CARD INLINE BUTTONS ── */
+.card-actions{display:flex;align-items:center;gap:2px;flex-shrink:0;padding-left:4px;}
+.card-btn{width:28px;height:28px;border-radius:5px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted);transition:all 0.12s;position:relative;flex-shrink:0;}
+.card-btn svg{width:14px;height:14px;}
+.card-btn:hover{background:var(--raised);}
+.card-btn.cb-toggle:hover{color:var(--yellow);background:var(--yellow-bg);}
+.card-btn.cb-toggle.is-disabled:hover{color:var(--green);background:var(--green-bg);}
+.card-btn.cb-rename:hover{color:var(--blue);background:var(--blue-bg);}
+.card-btn.cb-delete:hover{color:var(--red);background:var(--red-bg);}
+.card-btn::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--raised);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:4px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity 0.12s;z-index:50;}
+.card-btn:hover::after{opacity:1;}
+
+/* ── EMPTY ── */
+#empty-state{text-align:center;padding:60px 20px;display:none;}
+#empty-state h3{font-size:16px;font-weight:500;margin-bottom:8px;}
+#empty-state p{color:var(--muted);font-size:13px;}
+
+/* ── DETAIL ── */
+#detail-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);gap:10px;padding:40px;}
+#detail-empty .arrow{font-size:28px;opacity:0.3;}
+#detail-empty p{font-size:13px;text-align:center;line-height:1.6;}
+#detail-content{flex:1;display:none;flex-direction:column;}
+
+/* Section 1: name + command */
+#detail-header{padding:20px 24px 16px;border-bottom:1px solid var(--border);}
+#detail-job-name{font-size:16px;font-weight:600;margin-bottom:8px;}
+
+/* clickable code block */
+.code-block{font-family:var(--mono);font-size:11px;color:var(--muted);background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:8px 12px;word-break:break-all;cursor:pointer;transition:border-color 0.15s,color 0.15s;position:relative;line-height:1.6;}
+.code-block:hover{border-color:var(--border2);color:var(--text);}
+.code-block:hover::after{content:'click to copy';position:absolute;top:6px;right:8px;font-size:9px;color:var(--dim);letter-spacing:0.06em;text-transform:uppercase;}
+
+/* Section 2: info grid */
+#detail-info{padding:16px 24px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.info-item label{font-family:var(--mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:3px;}
+.info-item span{font-family:var(--mono);font-size:12px;color:var(--text);}
+
+/* log file path: show only filename, full path on hover */
+.logfile-cell{display:inline-flex;align-items:center;gap:6px;cursor:pointer;max-width:100%;font-family:var(--mono);font-size:12px;color:var(--text);transition:color 0.12s;}
+.logfile-name{font-family:var(--mono);font-size:12px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.logfile-cell{position:relative;}
+.logfile-cell .lf-tooltip{position:absolute;bottom:calc(100% + 6px);left:0;background:var(--raised);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:10px;padding:5px 10px;border-radius:5px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity 0.15s;z-index:60;max-width:320px;overflow:hidden;text-overflow:ellipsis;}
+.logfile-cell:hover .lf-tooltip{opacity:1;}
+.logfile-cell:hover{color:var(--blue);}
+
+/* Section 3: actions */
+#detail-actions-section{padding:14px 24px;border-bottom:1px solid var(--border);}
+#detail-actions-label{font-family:var(--mono);font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+#detail-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.action-btn{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:0.06em;padding:6px 14px;border-radius:5px;border:1px solid;cursor:pointer;transition:all 0.15s;background:none;}
+.btn-activate{color:var(--green);border-color:#3dd68c40;}.btn-activate:hover{background:var(--green-bg);border-color:var(--green);}
+.btn-deactivate{color:var(--yellow);border-color:#f0a50040;}.btn-deactivate:hover{background:var(--yellow-bg);border-color:var(--yellow);}
+.btn-log-add{color:var(--blue);border-color:#4a9eff40;}.btn-log-add:hover{background:var(--blue-bg);border-color:var(--blue);}
+.btn-log-remove{color:var(--muted);border-color:var(--border2);}.btn-log-remove:hover{background:var(--red-bg);border-color:var(--red);color:var(--red);}
+.btn-delete{color:var(--red);border-color:#f25f5c40;}.btn-delete:hover{background:var(--red-bg);border-color:var(--red);}
+.btn-rename{color:var(--blue);border-color:#4a9eff40;}.btn-rename:hover{background:var(--blue-bg);border-color:var(--blue);}
+.btn-neutral{color:var(--muted);border-color:var(--border);background:none;}.btn-neutral:hover{background:var(--raised);border-color:var(--border2);color:var(--text);}
+.btn-clear-logs{color:var(--muted);border-color:var(--border2);}.btn-clear-logs:hover{background:var(--red-bg);border-color:var(--red);color:var(--red);}
+
+/* Warnings */
+.warning-box{margin:12px 24px 0;padding:10px 14px;border-radius:6px;font-size:12px;line-height:1.5;}
+.warning-box .wi{margin-right:6px;}
+.warning-yellow{background:var(--yellow-bg);border:1px solid #f0a50030;color:var(--yellow);}
+.warning-grey{background:var(--raised);border:1px solid var(--border2);color:var(--muted);}
+
+/* Section 4: logs */
+#detail-logs{flex:1;display:flex;flex-direction:column;min-height:0;}
+#log-meta{padding:10px 24px 0;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+#logs-title-label{font-family:var(--mono);font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);}
+#date-picker-wrap{display:none;align-items:center;gap:8px;flex-shrink:0;}
+#date-picker-wrap label{font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);}
+#log-date-picker{background:var(--raised);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:11px;padding:5px 9px;border-radius:5px;cursor:pointer;outline:none;transition:border-color 0.15s;}
+#log-date-picker:hover,#log-date-picker:focus{border-color:var(--blue);}
+#log-date-picker::-webkit-calendar-picker-indicator{filter:invert(0.5);cursor:pointer;}
+#logs-body{flex:1;overflow-y:auto;padding:4px 24px 24px;}
+#logs-pre{font-family:var(--mono);font-size:11px;line-height:1.7;color:var(--muted);white-space:pre-wrap;word-break:break-all;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px 14px;}
+#logs-pre .log-start{color:var(--green);font-weight:600;}
+#logs-pre .log-end-ok{color:var(--green);font-weight:600;}
+#logs-pre .log-end-err{color:var(--red);font-weight:600;}
+#logs-pre .log-line{color:var(--muted);}
+#logs-pre .log-ts{color:var(--dim);}
+#no-logs-msg{padding:12px 0;font-family:var(--mono);font-size:12px;color:var(--muted);line-height:1.7;}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--raised);border:1px solid var(--border2);border-radius:6px;padding:10px 20px;font-family:var(--mono);font-size:12px;color:var(--text);opacity:0;transition:opacity 0.2s;pointer-events:none;z-index:999;white-space:nowrap;}
+#toast.show{opacity:1;}
+#toast.ok{border-color:#3dd68c50;color:var(--green);}
+#toast.err{border-color:#f25f5c50;color:var(--red);}
+
+/* ── MODALS ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:#00000088;z-index:500;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal-box{background:var(--raised);border:1px solid var(--border2);border-radius:10px;padding:24px;width:360px;display:flex;flex-direction:column;gap:14px;}
+.modal-title{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text);}
+.modal-body{font-size:13px;color:var(--muted);line-height:1.5;}
+.modal-input{background:var(--surface);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:13px;padding:9px 12px;border-radius:6px;outline:none;width:100%;transition:border-color 0.15s;}
+.modal-input:focus{border-color:var(--blue);}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:6px;height:6px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px;}::-webkit-scrollbar-thumb:hover{background:var(--dim);}
+
+/* ── LOADING ── */
+#loading-overlay{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:200;flex-direction:column;gap:14px;}
+#loading-overlay.hidden{display:none;}
+.loading-logo{font-family:var(--mono);font-size:20px;font-weight:600;color:var(--green);letter-spacing:0.1em;}
+.loading-sub{font-family:var(--mono);font-size:12px;color:var(--muted);}
+.loading-bar{width:160px;height:2px;background:var(--border);border-radius:1px;overflow:hidden;}
+.loading-fill{height:100%;background:var(--green);animation:sweep 1.2s ease-in-out infinite;width:40%;}
+@keyframes sweep{0%{transform:translateX(-120%)}100%{transform:translateX(380%)}}
+</style>
+</head>
+<body>
+
+<div id="loading-overlay">
+  <div class="loading-logo">cronpan</div>
+  <div class="loading-bar"><div class="loading-fill"></div></div>
+  <div class="loading-sub">reading crontab…</div>
+</div>
+
+<div id="topbar">
+  <a id="logo" href="/home" onclick="return goHome(event)">
+    <div id="logo-mark">CP</div>
+    <span id="logo-text">cronpan</span>
+    <span id="logo-version">v0.1</span>
+  </a>
+  <div id="topbar-right">
+    <span id="last-refreshed"></span>
+    <span id="tz-label"></span>
+    <button id="refresh-btn" onclick="loadJobs()">↻ refresh</button>
+  </div>
+</div>
+
+<div id="main">
+  <div id="jobs-panel">
+    <div class="section-header">
+      <span class="section-title">Cron Jobs</span>
+      <span class="job-count" id="job-count">–</span>
+    </div>
+    <!-- filter tabs -->
+    <div id="filter-tabs">
+      <button class="filter-tab active" onclick="setFilter('all',this)">All</button>
+      <button class="filter-tab" onclick="setFilter('active',this)">Active</button>
+      <button class="filter-tab" onclick="setFilter('inactive',this)">Inactive</button>
+    </div>
+    <!-- bulk action bar -->
+    <div id="bulk-bar">
+      <span id="bulk-count"></span>
+      <button class="bulk-btn bulk-btn-activate" onclick="bulkAction('enable')">activate</button>
+      <button class="bulk-btn bulk-btn-deactivate" onclick="bulkAction('disable')">deactivate</button>
+      <button class="bulk-btn bulk-btn-delete" onclick="bulkAction('delete')">delete</button>
+      <button class="bulk-btn bulk-btn-clear" onclick="clearSelection()">clear</button>
+    </div>
+    <div id="jobs-list"></div>
+    <div id="empty-state">
+      <h3>No cron jobs found</h3>
+      <p>Your crontab appears to be empty.<br>Run <code>crontab -e</code> to add jobs.</p>
+    </div>
+  </div>
+
+  <div id="detail-panel">
+    <div id="detail-empty">
+      <div class="arrow">←</div>
+      <p>Select a job to view details,<br>manage logging, and read logs.</p>
+    </div>
+    <div id="detail-content">
+      <!-- 1: name + command -->
+      <div id="detail-header">
+        <div id="detail-job-name"></div>
+        <div id="detail-job-command" class="code-block" onclick="copyCommand(this)" title="click to copy"></div>
+      </div>
+      <!-- 2: info grid -->
+      <div id="detail-info">
+        <div class="info-item"><label>Schedule</label><span id="info-schedule" style="font-family:var(--mono);font-size:12px;color:var(--text);">–</span></div>
+        <div class="info-item"><label>Status</label><span id="info-status">–</span></div>
+        <div class="info-item"><label>Log file</label><span id="info-logfile" style="font-family:var(--mono);font-size:12px;color:var(--text);">–</span></div>
+        <div class="info-item"><label>Running now</label><span id="info-running">–</span></div>
+      </div>
+      <!-- 3: actions -->
+      <div id="detail-actions-section">
+        <div id="detail-actions-label">Actions</div>
+        <div id="detail-actions"></div>
+      </div>
+      <!-- 3b: log controls (isolated) -->
+      <div id="detail-log-controls" style="display:none;padding:14px 24px;border-bottom:1px solid var(--border);">
+        <div id="log-actions" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+      </div>
+      <!-- warnings -->
+      <div id="detail-warnings"></div>
+      <!-- 4: logs -->
+      <div id="detail-logs">
+        <div id="log-meta">
+          <div id="logs-title-label">Logs</div>
+          <div id="date-picker-wrap">
+            <label>Date:</label>
+            <input type="date" id="log-date-picker">
+          </div>
+        </div>
+        <div id="logs-body">
+          <div id="no-logs-msg"></div>
+          <pre id="logs-pre"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div class="modal-overlay" id="rename-modal">
+  <div class="modal-box">
+    <div class="modal-title">Rename Job</div>
+    <input class="modal-input" id="rename-input" type="text" placeholder="Leave empty to use command as name…"
+      oninput="updateRenameWarning()"
+      onkeydown="if(event.key==='Enter')confirmRename();if(event.key==='Escape')closeModal('rename-modal');">
+    <div id="rename-warning" style="font-family:var(--mono);font-size:11px;color:var(--muted);display:none;">
+      ⚠ Name will be cleared — the command will be used as the display name and the description line will be removed.
+    </div>
+    <div class="modal-footer">
+      <button class="action-btn btn-neutral" onclick="closeModal('rename-modal')">cancel</button>
+      <button class="action-btn btn-rename" id="rename-ok-btn" onclick="confirmRename()">rename</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal-box">
+    <div class="modal-title" id="confirm-title">Confirm</div>
+    <div class="modal-body" id="confirm-body"></div>
+    <div class="modal-footer">
+      <button class="action-btn btn-neutral" onclick="closeModal('confirm-modal')">cancel</button>
+      <button class="action-btn" id="confirm-ok-btn" onclick="confirmAction()">confirm</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let jobs=[], selectedId=null, selectedDate=null, availableDates=[];
+let pendingAction=null, renameJobId=null;
+let selectedIds=new Set();
+let currentFilter='all';
+
+// ── INIT ──────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded',()=>{
+  // Timezone badge
+  const offset = -new Date().getTimezoneOffset();
+  const sign = offset >= 0 ? '+' : '-';
+  const h = String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0');
+  const m = String(Math.abs(offset) % 60).padStart(2, '0');
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  document.getElementById('tz-label').textContent = `${tz} (UTC${sign}${h}:${m})`;
+
+  // Click on jobs-panel background (not on a card) resets detail panel
+  document.getElementById('jobs-panel').addEventListener('click', e => {
+    if(!e.target.closest('.job-card') && selectedId !== null){
+      selectedId = null;
+      document.getElementById('detail-empty').style.display = 'flex';
+      document.getElementById('detail-content').style.display = 'none';
+      document.querySelectorAll('.job-card').forEach(c => c.classList.remove('selected'));
+    }
+  });
+
+  loadJobs();
+  setInterval(()=>loadJobs(true),15000);
+});
+
+function goHome(e){
+  e.preventDefault();
+  selectedId=null;
+  document.getElementById('detail-empty').style.display='flex';
+  document.getElementById('detail-content').style.display='none';
+  document.querySelectorAll('.job-card').forEach(c=>c.classList.remove('selected'));
+  history.pushState(null,'','/home');
+  return false;
+}
+
+// ── LOAD ──────────────────────────────────────────────
+async function loadJobs(silent=false){
+  if(!silent) document.getElementById('loading-overlay').classList.remove('hidden');
+  try{
+    const res=await fetch('/api/jobs');
+    const data=await res.json();
+    if(!data.ok) throw new Error(data.error);
+    jobs=data.jobs;
+    renderJobs();
+    if(selectedId!==null){
+      const job=jobs.find(j=>j.id===selectedId);
+      if(job) renderDetail(job);
+    }
+    document.getElementById('last-refreshed').textContent=`refreshed ${new Date().toLocaleTimeString()}`;
+  }catch(e){ showToast('Error: '+e.message,'err'); }
+  finally{ document.getElementById('loading-overlay').classList.add('hidden'); }
+}
+
+function setFilter(f, el){
+  currentFilter=f;
+  document.querySelectorAll('.filter-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  renderJobs();
+}
+
+function updateRenameWarning(){
+  const empty=document.getElementById('rename-input').value.trim()==='';
+  document.getElementById('rename-warning').style.display=empty?'block':'none';
+  document.getElementById('rename-ok-btn').textContent=empty?'clear name':'rename';
+}
+
+// ── RENDER JOBS LIST ──────────────────────────────────
+function renderJobs(){
+  const list=document.getElementById('jobs-list');
+  const all=jobs.filter(j=>j.status!=='deleted');
+  const visible=currentFilter==='active' ? all.filter(j=>j.status==='active')
+               :currentFilter==='inactive'? all.filter(j=>j.status==='disabled')
+               : all;
+
+  document.getElementById('job-count').textContent=all.length+' jobs';
+  if(visible.length===0){ list.innerHTML=`<div style="text-align:center;padding:40px 20px;font-family:var(--mono);font-size:12px;color:var(--muted);">No ${currentFilter==='all'?'':''+currentFilter+' '}jobs found.</div>`; document.getElementById('empty-state').style.display='none'; updateBulkBar(); return; }
+  document.getElementById('empty-state').style.display='none';
+  list.innerHTML='';
+  visible.forEach(job=>list.appendChild(makeJobCard(job)));
+  selectedIds.forEach(id=>{ if(!visible.find(j=>j.id===id)) selectedIds.delete(id); });
+  updateBulkBar();
+  if(selectedId!==null&&!visible.find(j=>j.id===selectedId)){
+    selectedId=null;
+    document.getElementById('detail-empty').style.display='flex';
+    document.getElementById('detail-content').style.display='none';
+  }
+}
+
+function makeJobCard(job){
+  const card=document.createElement('div');
+  card.className='job-card'+(job.id===selectedId?' selected':'');
+  card.dataset.id=job.id;
+  card.onclick=(e)=>{ if(!e.target.closest('.card-actions')&&!e.target.closest('.job-check-ui')&&!e.target.closest('.job-checkbox')) selectJob(job.id); };
+
+  const dotClass=job.running?'status-running':job.status==='active'?'status-active':'status-disabled';
+  const tags=[];
+  tags.push(`<span class="tag tag-schedule">${escHtml(job.schedule)}</span>`);
+  if(job.status==='disabled') tags.push(`<span class="tag tag-disabled">inactive</span>`);
+  if(job.running) tags.push(`<span class="tag tag-running">● running</span>`);
+  if(job.is_complex) tags.push(`<span class="tag tag-complex">⚠ complex</span>`);
+  else if(job.has_logging) tags.push(`<span class="tag tag-logging">● logging</span>`);
+  else tags.push(`<span class="tag tag-nolog">no logging</span>`);
+
+  const isActive=job.status==='active';
+  const toggleTip=isActive?'Deactivate':'Activate';
+  const toggleCls='cb-toggle'+(isActive?'':' is-disabled');
+  const toggleIcon=isActive
+    ? `<svg viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="2" width="4" height="12" rx="1"/><rect x="9" y="2" width="4" height="12" rx="1"/></svg>`
+    : `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2l10 6-10 6z"/></svg>`;
+  const action=isActive?'disable':'enable';
+  const actionCls=isActive?'btn-deactivate':'btn-activate';
+  const actionLabel=isActive?'deactivate':'activate';
+  const actionMsg=isActive?'This will comment out the cron line.':'This will uncomment the cron line.';
+  const checked=selectedIds.has(job.id)?'checked':'';
+
+  card.innerHTML=`
+    <div class="job-card-inner">
+      <input type="checkbox" class="job-checkbox" id="chk-${job.id}" ${checked}
+        onchange="toggleSelect(${job.id},this.checked)">
+      <label class="job-check-ui${checked?' checked':''}" for="chk-${job.id}"
+        onclick="event.stopPropagation()"></label>
+      <div class="job-card-body">
+        <div class="job-main">
+          <div class="job-name">${escHtml(job.name)}</div>
+          <div class="job-command">${escHtml(job.command)}</div>
+          <div class="job-meta">${tags.join('')}</div>
+        </div>
+      </div>
+      <div class="card-actions">
+        <div class="job-status-dot ${dotClass}" style="margin-right:10px;flex-shrink:0;"></div>
+        <button class="card-btn ${toggleCls}" data-tip="${toggleTip}"
+          onclick="askConfirm(${job.id},'${action}','${toggleTip} job?','${actionMsg}','${actionCls}','${actionLabel}')">
+          ${toggleIcon}
+        </button>
+        <button class="card-btn cb-rename" data-tip="Rename"
+          onclick="promptRename(jobs.find(j=>j.id===${job.id}))">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M11.5 1.5a1.5 1.5 0 012.12 2.12l-8 8a1 1 0 01-.38.24l-3 1a.5.5 0 01-.62-.62l1-3a1 1 0 01.24-.38l8-8z"/></svg>
+        </button>
+        <button class="card-btn cb-delete" data-tip="Delete"
+          onclick="askConfirm(${job.id},'delete','Delete job?','The cron line will be marked as deleted.','btn-delete','delete')">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,4 14,4"/><path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1"/><path d="M3 4l1 9a1 1 0 001 1h6a1 1 0 001-1l1-9"/><line x1="6.5" y1="7" x2="6.5" y2="11"/><line x1="9.5" y1="7" x2="9.5" y2="11"/></svg>
+        </button>
+      </div>
+    </div>`;
+  return card;
+}
+
+// ── BULK SELECTION ────────────────────────────────────
+function toggleSelect(id,checked){
+  if(checked) selectedIds.add(id); else selectedIds.delete(id);
+  const lbl=document.querySelector(`label[for="chk-${id}"]`);
+  if(lbl) lbl.classList.toggle('checked',checked);
+  updateBulkBar();
+}
+
+function updateBulkBar(){
+  const bar=document.getElementById('bulk-bar');
+  const count=document.getElementById('bulk-count');
+  if(selectedIds.size>0){
+    bar.classList.add('visible');
+    count.textContent=selectedIds.size+' selected';
+  } else {
+    bar.classList.remove('visible');
+  }
+}
+
+function clearSelection(){
+  selectedIds.clear();
+  document.querySelectorAll('.job-check-ui').forEach(l=>l.classList.remove('checked'));
+  document.querySelectorAll('.job-checkbox').forEach(cb=>cb.checked=false);
+  updateBulkBar();
+}
+
+function bulkAction(action){
+  const n=selectedIds.size;
+  const label={enable:'Activate',disable:'Deactivate',delete:'Delete'}[action];
+  const msg=`${label} ${n} job${n>1?'s':''}?`;
+  const body=action==='delete'
+    ? 'Selected jobs will be marked as deleted.'
+    : `Selected jobs will be ${action==='enable'?'activated':'deactivated'}.`;
+  const cls=action==='enable'?'btn-activate':action==='disable'?'btn-deactivate':'btn-delete';
+  pendingAction={bulk:true,ids:[...selectedIds],action};
+  document.getElementById('confirm-title').textContent=msg;
+  document.getElementById('confirm-body').textContent=body;
+  const btn=document.getElementById('confirm-ok-btn');
+  btn.className='action-btn '+cls;
+  btn.textContent=label.toLowerCase();
+  openModal('confirm-modal');
+}
+
+// ── SELECT JOB (open detail) ──────────────────────────
+function selectJob(id){
+  selectedId=id;
+  document.querySelectorAll('.job-card').forEach(c=>c.classList.toggle('selected',parseInt(c.dataset.id)===id));
+  const job=jobs.find(j=>j.id===id);
+  if(job) renderDetail(job);
+}
+
+// ── RENDER DETAIL ─────────────────────────────────────
+function renderDetail(job){
+  document.getElementById('detail-empty').style.display='none';
+  document.getElementById('detail-content').style.display='flex';
+
+  // Section 1
+  document.getElementById('detail-job-name').textContent=job.name;
+  const cmdEl=document.getElementById('detail-job-command');
+  cmdEl.textContent=job.command;
+  cmdEl.dataset.full=job.command;
+
+  // Section 2
+  document.getElementById('info-schedule').textContent=job.schedule||'–';
+  document.getElementById('info-status').textContent=job.running?'● running':job.status==='active'?'active':'inactive';
+  document.getElementById('info-running').textContent=job.running?'yes':'no';
+  document.getElementById('info-logfile').textContent='–';
+
+  // Section 3: actions
+  const actions=document.getElementById('detail-actions');
+  actions.innerHTML='';
+  if(job.status!=='deleted'){
+    if(job.status==='disabled'){
+      addBtn(actions,'activate','btn-activate',()=>askConfirm(job.id,'enable','Activate job?','This will uncomment the cron line.','btn-activate','activate'),
+        '<path d="M4 2l10 6-10 6z"/>');
+    } else {
+      addBtn(actions,'deactivate','btn-deactivate',()=>askConfirm(job.id,'disable','Deactivate job?','This will comment out the cron line.','btn-deactivate','deactivate'),
+        '<rect x="3" y="2" width="4" height="12" rx="1"/><rect x="9" y="2" width="4" height="12" rx="1"/>');
+    }
+    addBtn(actions,'rename','btn-rename',()=>promptRename(job),
+      '<path d="M11.5 1.5a1.5 1.5 0 012.12 2.12l-8 8a1 1 0 01-.38.24l-3 1a.5.5 0 01-.62-.62l1-3a1 1 0 01.24-.38l8-8z"/>');
+    addBtn(actions,'delete','btn-delete',()=>askConfirm(job.id,'delete','Delete job?','The cron line will be marked as deleted.','btn-delete','delete'),
+      '<polyline points="2,4 14,4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><path d="M3 4l1 9a1 1 0 001 1h6a1 1 0 001-1l1-9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><line x1="6.5" y1="7" x2="6.5" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="9.5" y1="7" x2="9.5" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>');
+  }
+
+  // Section 3b: log controls
+  const logControls=document.getElementById('detail-log-controls');
+  const logActions=document.getElementById('log-actions');
+  logActions.innerHTML='';
+  if(job.status!=='deleted'&&!job.is_complex){
+    if(!job.has_logging){
+      addBtn(logActions,'enable logging','btn-log-add',()=>askConfirm(job.id,'add-logging','Enable logging?','Output will be captured to ~/.cronlogs/.','btn-log-add','enable'),
+        '<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none"/><line x1="8" y1="5" x2="8" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>');
+    } else {
+      addBtn(logActions,'disable logging','btn-log-remove',()=>askConfirm(job.id,'remove-logging','Disable logging?','The logger pipe will be removed from the cron line.','btn-delete','disable'),
+        '<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none"/><line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>');
+      if(job.log_path){
+        addBtn(logActions,'clear logs','btn-clear-logs',()=>askConfirm(job.id,'clear-logs','Clear all logs?',`All log files for "${job.name}" will be permanently deleted.`,'btn-delete','clear'),
+          '<polyline points="2,4 14,4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><path d="M3 4l1 9a1 1 0 001 1h6a1 1 0 001-1l1-9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><line x1="6.5" y1="7" x2="6.5" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="9.5" y1="7" x2="9.5" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>');
+      }
+    }
+    logControls.style.display='block';
+  } else {
+    logControls.style.display='none';
+  }
+
+  // Warnings
+  const warnings=document.getElementById('detail-warnings');
+  warnings.innerHTML='';
+  if(job.is_complex) warnings.innerHTML+=`<div class="warning-box warning-yellow"><span class="wi">⚠</span>Complex entry — logging cannot be added automatically.</div>`;
+  else if(job.has_other_redirect&&!job.has_logging) warnings.innerHTML+=`<div class="warning-box warning-grey"><span class="wi">ℹ</span>Job already redirects output. Log reading not available in v1.</div>`;
+
+  renderLogs(job);
+}
+
+// ── RENDER LOGS ───────────────────────────────────────
+async function renderLogs(job,date=null){
+  const pre=document.getElementById('logs-pre');
+  const noMsg=document.getElementById('no-logs-msg');
+  const pickerWrap=document.getElementById('date-picker-wrap');
+  const picker=document.getElementById('log-date-picker');
+  const logfileEl=document.getElementById('info-logfile');
+  pre.innerHTML=''; pre.style.display='none'; noMsg.textContent=''; pickerWrap.style.display='none';
+
+  // Reset log file to base path
+  if(job.log_path){
+    const full=shortPath(job.log_path);
+    const dirName=full.split('/').pop();
+    logfileEl.innerHTML=`<span class="logfile-cell" onclick="copyText('${escAttr(full)}',this)" title="${escAttr(full)}">${escHtml(dirName)}<span class="lf-tooltip">${escHtml(full)}</span></span>`;
+  } else {
+    logfileEl.textContent='none';
+  }
+
+  if(!job.has_logging){ noMsg.textContent='Logging not enabled. Click "enable logging" to start capturing output.'; return; }
+  if(!job.log_accessible&&job.log_inaccessible_reason){ noMsg.textContent=job.log_inaccessible_reason; return; }
+
+  function updateLogfileLabel(d){
+    if(!job.log_path) return;
+    const full=shortPath(job.log_path);
+    const dirName=full.split('/').pop();
+    const display=job.log_is_dir && d ? `${dirName}/${d}.log` : dirName;
+    const fullFile=job.log_is_dir && d ? `${full}/${d}.log` : full;
+    logfileEl.innerHTML=`<span class="logfile-cell" onclick="copyText('${escAttr(fullFile)}',this)" title="${escAttr(fullFile)}">${escHtml(display)}<span class="lf-tooltip">${escHtml(fullFile)}</span></span>`;
+  }
+
+  if(job.log_is_dir){
+    try{
+      const dres=await fetch(`/api/jobs/${job.id}/log-dates`);
+      const ddata=await dres.json();
+      if(ddata.ok&&ddata.dates.length>0){
+        availableDates=ddata.dates;
+        if(!date) date=ddata.dates[0];
+        selectedDate=date;
+        const iso=`${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6)}`;
+        picker.value=iso;
+        const minD=ddata.dates[ddata.dates.length-1], maxD=ddata.dates[0];
+        picker.min=`${minD.slice(0,4)}-${minD.slice(4,6)}-${minD.slice(6)}`;
+        picker.max=`${maxD.slice(0,4)}-${maxD.slice(4,6)}-${maxD.slice(6)}`;
+        updateLogfileLabel(date);
+        picker.onchange=()=>{
+          const val=picker.value.replace(/-/g,'');
+          updateLogfileLabel(val);
+          if(availableDates.includes(val)) renderLogs(job,val);
+          else{ noMsg.textContent=`No logs for ${picker.value}.`; pre.innerHTML=''; pre.style.display='none'; }
+        };
+        pickerWrap.style.display='flex';
+      }
+    }catch(e){}
+  }
+
+  noMsg.textContent='Loading logs…';
+  try{
+    const url=date?`/api/jobs/${job.id}/logs?date=${date}`:`/api/jobs/${job.id}/logs`;
+    const res=await fetch(url);
+    const data=await res.json();
+    if(!data.ok){ noMsg.textContent=data.error; return; }
+    noMsg.textContent='';
+    pre.innerHTML=colorizeLog(data.logs);
+    pre.style.display='block';
+    document.getElementById('logs-body').scrollTop=999999;
+  }catch(e){ noMsg.textContent='Failed to load logs: '+e.message; }
+}
+
+function colorizeLog(text){
+  if(!text) return '<span style="color:var(--dim)">No output yet.</span>';
+  return text.split('\n').map(line=>{
+    const esc=escHtml(line);
+    if(line.startsWith('▶')) return `<span class="log-start">${esc}</span>`;
+    if(line.startsWith('■')&&line.includes('EXIT:0')) return `<span class="log-end-ok">${esc}</span>`;
+    if(line.startsWith('■')) return `<span class="log-end-err">${esc}</span>`;
+    const m=line.match(/^(\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\])\s*(.*)/);
+    if(m) return `<span class="log-ts">${escHtml(m[1])}</span> <span class="log-line">${escHtml(m[2])}</span>`;
+    return `<span class="log-line">${esc}</span>`;
+  }).join('\n');
+}
+
+// ── CONFIRM MODAL ─────────────────────────────────────
+function askConfirm(jobId,action,title,body,btnCls,btnLabel){
+  pendingAction={jobId,action};
+  document.getElementById('confirm-title').textContent=title;
+  document.getElementById('confirm-body').textContent=body;
+  const btn=document.getElementById('confirm-ok-btn');
+  btn.className='action-btn '+btnCls;
+  btn.textContent=btnLabel;
+  openModal('confirm-modal');
+}
+
+async function confirmAction(){
+  if(!pendingAction) return;
+  const pa=pendingAction;
+  pendingAction=null;
+  closeModal('confirm-modal');
+  if(pa.bulk){
+    // run actions sequentially
+    for(const id of pa.ids){
+      try{
+        const res=await fetch(`/api/jobs/${id}/${pa.action}`,{method:'POST'});
+        const data=await res.json();
+        if(!data.ok) console.warn(`Failed for job ${id}:`,data.error);
+      }catch(e){ console.warn(e); }
+    }
+    const label={enable:'Activated',disable:'Deactivated',delete:'Deleted'}[pa.action];
+    showToast(`${label} ${pa.ids.length} job${pa.ids.length>1?'s':''}`, 'ok');
+    clearSelection();
+    await loadJobs(true);
+    if(selectedId!==null){ const job=jobs.find(j=>j.id===selectedId); if(job) renderDetail(job); }
+  } else {
+    await doAction(pa.jobId,pa.action);
+  }
+}
+
+// ── RENAME ────────────────────────────────────────────
+function promptRename(job){
+  if(!job) return;
+  renameJobId=job.id;
+  const input=document.getElementById('rename-input');
+  input.value=job.name;
+  document.getElementById('rename-warning').style.display='none';
+  document.getElementById('rename-ok-btn').textContent='rename';
+  openModal('rename-modal');
+  setTimeout(()=>{ input.focus(); input.select(); },80);
+}
+
+async function confirmRename(){
+  const name=document.getElementById('rename-input').value.trim(); // empty = clear
+  if(renameJobId===null) return;
+  const id=renameJobId;
+  closeModal('rename-modal');
+  try{
+    const res=await fetch(`/api/jobs/${id}/rename`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+    const data=await res.json();
+    if(!data.ok) throw new Error(data.error);
+    showToast(name?'Renamed successfully':'Name cleared','ok');
+    await loadJobs(true);
+    const job=jobs.find(j=>j.id===id);
+    if(job) renderDetail(job);
+  }catch(e){ showToast('Error: '+e.message,'err'); }
+}
+
+// ── ACTIONS ───────────────────────────────────────────
+async function doAction(jobId,action){
+  try{
+    const res=await fetch(`/api/jobs/${jobId}/${action}`,{method:'POST'});
+    const data=await res.json();
+    if(!data.ok) throw new Error(data.error);
+    const labels={enable:'Activated',disable:'Deactivated',delete:'Deleted','add-logging':'Logging enabled','remove-logging':'Logging disabled','clear-logs':'Logs cleared'};
+    showToast((labels[action]||action)+' successfully','ok');
+    await loadJobs(true);
+    const job=jobs.find(j=>j.id===jobId);
+    if(job){ renderDetail(job); }
+  }catch(e){ showToast('Error: '+e.message,'err'); }
+}
+
+// ── COPY HELPERS ──────────────────────────────────────
+function copyCommand(el){
+  const text=el.dataset.full||el.textContent;
+  copyText(text,el);
+}
+
+function copyText(text,el){
+  navigator.clipboard.writeText(text).then(()=>{
+    showToast('Copied!','ok');
+  }).catch(()=>{ showToast('Copy failed','err'); });
+}
+
+// ── MODAL HELPERS ─────────────────────────────────────
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeModal('confirm-modal'); closeModal('rename-modal'); }});
+document.querySelectorAll('.modal-overlay').forEach(overlay=>{
+  overlay.addEventListener('click',e=>{ if(e.target===overlay) closeModal(overlay.id); });
+});
+
+// ── MISC ──────────────────────────────────────────────
+function addBtn(container,label,cls,fn,icon){
+  const btn=document.createElement('button');
+  btn.className='action-btn '+cls;
+  if(icon) btn.innerHTML=`<svg viewBox="0 0 16 16" width="13" height="13" style="flex-shrink:0;margin-right:5px;vertical-align:-1px" fill="currentColor">${icon}</svg>`+escHtml(label);
+  else btn.textContent=label;
+  btn.onclick=fn;
+  container.appendChild(btn);
+}
+function shortPath(p){ if(!p) return ''; return p.replace(/\/root|\/home\/[^/]+|\/Users\/[^/]+/,'~'); }
+function escHtml(s){ if(!s) return ''; return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s){ if(!s) return ''; return s.replace(/"/g,'&quot;').replace(/'/g,"\\'"); }
+let toastTimer;
+function showToast(msg,type=''){ const t=document.getElementById('toast'); t.textContent=msg; t.className='show '+type; clearTimeout(toastTimer); toastTimer=setTimeout(()=>{t.className='';},2800); }
+</script>
+</body>
+</html>

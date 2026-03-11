@@ -1,0 +1,12 @@
+PATH=/usr/local/bin:/usr/bin:/bin
+
+#[DESCRIPTION] Daily Backup
+0 2 * * * python3 -u /app/test/scripts/backup.py 2>&1 | /root/.cronlogs/logger.sh /root/.cronlogs/daily_backup "Daily Backup"
+
+#[DESCRIPTION] Cleanup
+* * * * * python3 -u /app/test/scripts/cleanup.py 2>&1 | /root/.cronlogs/logger.sh /root/.cronlogs/cleanup "Cleanup"
+
+* * * * * stdbuf -oL python3 -u /app/test/scripts/slow_job.py 2>&1 | /root/.cronlogs/logger.sh /root/.cronlogs/slow_job "slow_job"
+
+#[DESCRIPTION] Analytics Pipeline
+*/5 * * * * stdbuf -oL python3 -u /app/test/scripts/verbose_job.py 2>&1 | /root/.cronlogs/logger.sh /root/.cronlogs/analytics_pipeline "Analytics Pipeline"
