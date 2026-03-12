@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cronpan"
-version = "0.1.0"
+version = "0.2.0"
 description = "Cron job monitor for humans — view, toggle, and tail your cron jobs from a browser"
 readme = "README.md"
 license = { text = "MIT" }
