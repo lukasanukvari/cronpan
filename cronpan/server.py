@@ -18,9 +18,12 @@ from cronpan.crontab import (
     is_job_running,
     list_log_dates,
     parse_crontab,
+    parse_system_crontab,
     read_logs,
+    remove_custom_logpath,
     remove_logging,
     rename_job,
+    set_custom_logpath,
     strip_our_logging,
 )
 
@@ -50,7 +53,10 @@ def api_jobs():
         jobs = parse_crontab()
         for job in jobs:
             job['running'] = is_job_running(job['raw_command']) if job['status'] == 'active' else False
-        return jsonify({'ok': True, 'jobs': jobs})
+        system_jobs = parse_system_crontab()
+        for job in system_jobs:
+            job['running'] = is_job_running(job['raw_command'])
+        return jsonify({'ok': True, 'jobs': jobs + system_jobs})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
 
@@ -147,6 +153,35 @@ def api_log_dates(job_id):
             return jsonify({'ok': False, 'error': 'Job not found'}), 404
         dates = list_log_dates(job['log_path']) if job.get('log_is_dir') and job.get('log_path') else []
         return jsonify({'ok': True, 'dates': dates})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/jobs/<int:job_id>/set-logpath', methods=['POST'])
+def api_set_logpath(job_id):
+    try:
+        jobs = parse_crontab()
+        job = next((j for j in jobs if j['id'] == job_id), None)
+        if not job:
+            return jsonify({'ok': False, 'error': 'Job not found'}), 404
+        log_path = (request.json or {}).get('log_path', '').strip()
+        if not log_path:
+            return jsonify({'ok': False, 'error': 'No log path provided'}), 400
+        set_custom_logpath(job['line_index'], log_path)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/jobs/<int:job_id>/remove-logpath', methods=['POST'])
+def api_remove_logpath(job_id):
+    try:
+        jobs = parse_crontab()
+        job = next((j for j in jobs if j['id'] == job_id), None)
+        if not job:
+            return jsonify({'ok': False, 'error': 'Job not found'}), 404
+        remove_custom_logpath(job['line_index'])
+        return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
 

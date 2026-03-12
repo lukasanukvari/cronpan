@@ -190,6 +190,8 @@ def parse_crontab() -> list[dict]:
             'raw_command': command,
             'status': status,
             'line_index': i,
+            'source': 'crontab',
+            'readonly': False,
             'log_path': log_path,
             'log_accessible': log_accessible,
             'log_inaccessible_reason': log_inaccessible_reason,
@@ -316,6 +318,87 @@ def list_log_dates(log_path: str) -> list:
     return sorted(dates, reverse=True)
 
 
+def read_system_cron_files() -> list[tuple[str, list[str]]]:
+    """Read all files in /etc/cron.d/ that are readable. Returns list of (filename, lines)."""
+    cron_d = Path('/etc/cron.d')
+    results = []
+    if not cron_d.exists():
+        return results
+    for f in sorted(cron_d.iterdir()):
+        if not f.is_file():
+            continue
+        if f.name.startswith('.') or f.name.endswith('~'):
+            continue
+        try:
+            lines = f.read_text(errors='replace').splitlines()
+            results.append((f.name, lines))
+        except PermissionError:
+            continue
+    return results
+
+
+def parse_system_crontab() -> list[dict]:
+    """
+    Parse /etc/cron.d/ files into read-only job dicts.
+    These jobs cannot be modified — shown with readonly=True.
+    """
+    jobs = []
+    job_id = 10000  # offset to avoid collisions with user crontab IDs
+
+    for filename, lines in read_system_cron_files():
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+
+            # /etc/cron.d lines have an extra username field:
+            # min hr dom mon dow username command
+            m = re.match(
+                r'^((?:\S+\s+){5})(\S+)\s+(.*)',
+                stripped,
+            )
+            if not m:
+                # try @special syntax: @reboot username command
+                m2 = re.match(r'^(@\w+)\s+(\S+)\s+(.*)', stripped)
+                if not m2:
+                    continue
+                schedule = m2.group(1)
+                command = m2.group(3).strip()
+            else:
+                schedule = m.group(1).strip()
+                command = m.group(3).strip()
+
+            if not command:
+                continue
+
+            log_path, _, log_is_dir = extract_log_path(command)
+            display_command = strip_our_logging(command)
+
+            jobs.append({
+                'id': job_id,
+                'name': display_command,
+                'schedule': schedule,
+                'command': display_command,
+                'raw_command': command,
+                'status': 'active',
+                'line_index': i,
+                'source': f'/etc/cron.d/{filename}',
+                'readonly': True,
+                'log_path': log_path,
+                'log_accessible': False,
+                'log_inaccessible_reason': None,
+                'has_logging': bool(log_path),
+                'log_our_file': False,
+                'log_is_dir': log_is_dir,
+                'is_complex': is_complex(command),
+                'has_other_redirect': has_other_redirection(command),
+                'running': False,
+            })
+            job_id += 1
+
+    return jobs
+
+
 def get_running_procs() -> list[str]:
     """Return full command strings of all running processes via /proc or ps fallback."""
     procs = []
@@ -417,3 +500,23 @@ def clear_logs(log_path: str) -> int:
         p.unlink()
         count = 1
     return count
+
+
+def set_custom_logpath(line_index: int, log_path: str):
+    """Add or replace #[LOGPATH] comment at the end of a cron line."""
+    raw = read_raw_crontab()
+    line = raw[line_index]
+    # Remove any existing #[LOGPATH] on this line
+    line = re.sub(r'\s*#\[LOGPATH\]\s*\S+', '', line).rstrip()
+    line = f'{line} #[LOGPATH] {log_path}'
+    raw[line_index] = line
+    write_raw_crontab(raw)
+
+
+def remove_custom_logpath(line_index: int):
+    """Remove #[LOGPATH] comment from a cron line."""
+    raw = read_raw_crontab()
+    line = raw[line_index]
+    line = re.sub(r'\s*#\[LOGPATH\]\s*\S+', '', line).rstrip()
+    raw[line_index] = line
+    write_raw_crontab(raw)

@@ -87,6 +87,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
 .tag-complex{background:var(--yellow-bg);color:var(--yellow);border:1px solid #f0a50030;}
 .tag-running{background:var(--green-bg);color:var(--green);border:1px solid #3dd68c30;}
 .tag-disabled{background:var(--raised);color:var(--dim);border:1px solid var(--border);}
+.tag-system{background:var(--raised);color:var(--muted);border:1px solid var(--border2);}
 
 /* ── CARD INLINE BUTTONS ── */
 .card-actions{display:flex;align-items:center;gap:2px;flex-shrink:0;padding-left:4px;}
@@ -324,9 +325,22 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14
   </div>
 </div>
 
-<script>
+<div class="modal-overlay" id="logpath-modal">
+  <div class="modal-box">
+    <div class="modal-title">Set Log File</div>
+    <input class="modal-input" id="logpath-input" type="text" placeholder="/var/log/myjob.log"
+      onkeydown="if(event.key==='Enter')confirmLogpath();if(event.key==='Escape')closeModal('logpath-modal');">
+    <div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:-4px;">
+      Full path to an existing or future log file. cronpan will read it as-is.
+    </div>
+    <div class="modal-footer">
+      <button class="action-btn btn-neutral" onclick="closeModal('logpath-modal')">cancel</button>
+      <button class="action-btn btn-log-add" onclick="confirmLogpath()">save</button>
+    </div>
+  </div>
+</div>
 let jobs=[], selectedId=null, selectedDate=null, availableDates=[];
-let pendingAction=null, renameJobId=null;
+let pendingAction=null, renameJobId=null, logpathJobId=null;
 let selectedIds=new Set();
 let currentFilter='all';
 
@@ -428,9 +442,10 @@ function makeJobCard(job){
   tags.push(`<span class="tag tag-schedule">${escHtml(job.schedule)}</span>`);
   if(job.status==='disabled') tags.push(`<span class="tag tag-disabled">inactive</span>`);
   if(job.running) tags.push(`<span class="tag tag-running">● running</span>`);
+  if(job.readonly) tags.push(`<span class="tag tag-system">system</span>`);
   if(job.is_complex) tags.push(`<span class="tag tag-complex">⚠ complex</span>`);
   else if(job.has_logging) tags.push(`<span class="tag tag-logging">● logging</span>`);
-  else tags.push(`<span class="tag tag-nolog">no logging</span>`);
+  else if(!job.readonly) tags.push(`<span class="tag tag-nolog">no logging</span>`);
 
   const isActive=job.status==='active';
   const toggleTip=isActive?'Deactivate':'Activate';
@@ -459,6 +474,7 @@ function makeJobCard(job){
       </div>
       <div class="card-actions">
         <div class="job-status-dot ${dotClass}" style="margin-right:10px;flex-shrink:0;"></div>
+        ${job.readonly ? '' : `
         <button class="card-btn ${toggleCls}" data-tip="${toggleTip}"
           onclick="askConfirm(${job.id},'${action}','${toggleTip} job?','${actionMsg}','${actionCls}','${actionLabel}')">
           ${toggleIcon}
@@ -470,7 +486,7 @@ function makeJobCard(job){
         <button class="card-btn cb-delete" data-tip="Delete"
           onclick="askConfirm(${job.id},'delete','Delete job?','The cron line will be marked as deleted.','btn-delete','delete')">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,4 14,4"/><path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1"/><path d="M3 4l1 9a1 1 0 001 1h6a1 1 0 001-1l1-9"/><line x1="6.5" y1="7" x2="6.5" y2="11"/><line x1="9.5" y1="7" x2="9.5" y2="11"/></svg>
-        </button>
+        </button>`}
       </div>
     </div>`;
   return card;
@@ -546,36 +562,51 @@ function renderDetail(job){
 
   // Section 3: actions
   const actions=document.getElementById('detail-actions');
+  const actionsSection=document.getElementById('detail-actions-section');
   actions.innerHTML='';
-  if(job.status!=='deleted'){
-    if(job.status==='disabled'){
-      addBtn(actions,'activate','btn-activate',()=>askConfirm(job.id,'enable','Activate job?','This will uncomment the cron line.','btn-activate','activate'),
-        '<path d="M4 2l10 6-10 6z"/>');
-    } else {
-      addBtn(actions,'deactivate','btn-deactivate',()=>askConfirm(job.id,'disable','Deactivate job?','This will comment out the cron line.','btn-deactivate','deactivate'),
-        '<rect x="3" y="2" width="4" height="12" rx="1"/><rect x="9" y="2" width="4" height="12" rx="1"/>');
+  if(job.readonly){
+    actionsSection.style.display='none';
+  } else {
+    actionsSection.style.display='';
+    if(job.status!=='deleted'){
+      if(job.status==='disabled'){
+        addBtn(actions,'activate','btn-activate',()=>askConfirm(job.id,'enable','Activate job?','This will uncomment the cron line.','btn-activate','activate'),
+          '<path d="M4 2l10 6-10 6z"/>');
+      } else {
+        addBtn(actions,'deactivate','btn-deactivate',()=>askConfirm(job.id,'disable','Deactivate job?','This will comment out the cron line.','btn-deactivate','deactivate'),
+          '<rect x="3" y="2" width="4" height="12" rx="1"/><rect x="9" y="2" width="4" height="12" rx="1"/>');
+      }
+      addBtn(actions,'rename','btn-rename',()=>promptRename(job),
+        '<path d="M11.5 1.5a1.5 1.5 0 012.12 2.12l-8 8a1 1 0 01-.38.24l-3 1a.5.5 0 01-.62-.62l1-3a1 1 0 01.24-.38l8-8z"/>');
+      addBtn(actions,'delete','btn-delete',()=>askConfirm(job.id,'delete','Delete job?','The cron line will be marked as deleted.','btn-delete','delete'),
+        '<polyline points="2,4 14,4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><path d="M3 4l1 9a1 1 0 001 1h6a1 1 0 001-1l1-9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><line x1="6.5" y1="7" x2="6.5" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="9.5" y1="7" x2="9.5" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>');
     }
-    addBtn(actions,'rename','btn-rename',()=>promptRename(job),
-      '<path d="M11.5 1.5a1.5 1.5 0 012.12 2.12l-8 8a1 1 0 01-.38.24l-3 1a.5.5 0 01-.62-.62l1-3a1 1 0 01.24-.38l8-8z"/>');
-    addBtn(actions,'delete','btn-delete',()=>askConfirm(job.id,'delete','Delete job?','The cron line will be marked as deleted.','btn-delete','delete'),
-      '<polyline points="2,4 14,4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><path d="M3 4l1 9a1 1 0 001 1h6a1 1 0 001-1l1-9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><line x1="6.5" y1="7" x2="6.5" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="9.5" y1="7" x2="9.5" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>');
   }
 
   // Section 3b: log controls
   const logControls=document.getElementById('detail-log-controls');
   const logActions=document.getElementById('log-actions');
   logActions.innerHTML='';
-  if(job.status!=='deleted'&&!job.is_complex){
-    if(!job.has_logging){
-      addBtn(logActions,'enable logging','btn-log-add',()=>askConfirm(job.id,'add-logging','Enable logging?','Output will be captured to ~/.cronlogs/.','btn-log-add','enable'),
-        '<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none"/><line x1="8" y1="5" x2="8" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>');
-    } else {
-      addBtn(logActions,'disable logging','btn-log-remove',()=>askConfirm(job.id,'remove-logging','Disable logging?','The logger pipe will be removed from the cron line.','btn-delete','disable'),
-        '<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none"/><line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>');
-      if(job.log_path){
-        addBtn(logActions,'clear logs','btn-clear-logs',()=>askConfirm(job.id,'clear-logs','Clear all logs?',`All log files for "${job.name}" will be permanently deleted.`,'btn-delete','clear'),
-          '<polyline points="2,4 14,4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><path d="M3 4l1 9a1 1 0 001 1h6a1 1 0 001-1l1-9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><line x1="6.5" y1="7" x2="6.5" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="9.5" y1="7" x2="9.5" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>');
+  if(!job.readonly&&job.status!=='deleted'){
+    if(!job.is_complex){
+      if(!job.has_logging){
+        addBtn(logActions,'enable logging','btn-log-add',()=>askConfirm(job.id,'add-logging','Enable logging?','Output will be captured to ~/.cronlogs/.','btn-log-add','enable'),
+          '<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none"/><line x1="8" y1="5" x2="8" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>');
+      } else {
+        addBtn(logActions,'disable logging','btn-log-remove',()=>askConfirm(job.id,'remove-logging','Disable logging?','The logger pipe will be removed from the cron line.','btn-delete','disable'),
+          '<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none"/><line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>');
+        if(job.log_path){
+          addBtn(logActions,'clear logs','btn-clear-logs',()=>askConfirm(job.id,'clear-logs','Clear all logs?',`All log files for "${job.name}" will be permanently deleted.`,'btn-delete','clear'),
+            '<polyline points="2,4 14,4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><path d="M3 4l1 9a1 1 0 001 1h6a1 1 0 001-1l1-9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><line x1="6.5" y1="7" x2="6.5" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="9.5" y1="7" x2="9.5" y2="11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>');
+        }
       }
+    }
+    if(!job.has_logging||job.is_complex){
+      addBtn(logActions,'set log file','btn-log-add',()=>promptLogpath(job),
+        '<path d="M2 3h8l3 3v7a1 1 0 01-1 1H2a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><polyline points="9,3 9,6 13,6" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><line x1="4" y1="9" x2="10" y2="9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><line x1="4" y1="11.5" x2="8" y2="11.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>');
+    } else if(job.is_custom_log){
+      addBtn(logActions,'remove log file','btn-log-remove',()=>askConfirm(job.id,'remove-logpath','Remove log file?','The #[LOGPATH] reference will be removed from the cron line.','btn-delete','remove'),
+        '<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none"/><line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>');
     }
     logControls.style.display='block';
   } else {
@@ -585,7 +616,8 @@ function renderDetail(job){
   // Warnings
   const warnings=document.getElementById('detail-warnings');
   warnings.innerHTML='';
-  if(job.is_complex) warnings.innerHTML+=`<div class="warning-box warning-yellow"><span class="wi">⚠</span>Complex entry — logging cannot be added automatically.</div>`;
+  if(job.readonly) warnings.innerHTML+=`<div class="warning-box warning-grey"><span class="wi">ℹ</span>System job from <span style="font-family:var(--mono);font-size:11px">${escHtml(job.source)}</span> — read only.</div>`;
+  else if(job.is_complex) warnings.innerHTML+=`<div class="warning-box warning-yellow"><span class="wi">⚠</span>Complex entry — logging cannot be added automatically.</div>`;
   else if(job.has_other_redirect&&!job.has_logging) warnings.innerHTML+=`<div class="warning-box warning-grey"><span class="wi">ℹ</span>Job already redirects output. Log reading not available in v1.</div>`;
 
   renderLogs(job);
@@ -735,13 +767,34 @@ async function confirmRename(){
   }catch(e){ showToast('Error: '+e.message,'err'); }
 }
 
+// ── LOGPATH ───────────────────────────────────────────
+function promptLogpath(job){
+  logpathJobId=job.id;
+  const input=document.getElementById('logpath-input');
+  input.value=(job.is_custom_log&&job.log_path)?job.log_path:'';
+  openModal('logpath-modal');
+  setTimeout(()=>{ input.focus(); input.select(); },80);
+}
+
+async function confirmLogpath(){
+  const path=document.getElementById('logpath-input').value.trim();
+  if(!path) return;
+  closeModal('logpath-modal');
+  try{
+    const res=await fetch(`/api/jobs/${logpathJobId}/set-logpath`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({log_path:path})});
+    const data=await res.json();
+    if(data.ok){ showToast('Log file saved','ok'); loadJobs(true); }
+    else showToast('Error: '+data.error,'err');
+  }catch(e){ showToast('Error: '+e.message,'err'); }
+}
+
 // ── ACTIONS ───────────────────────────────────────────
 async function doAction(jobId,action){
   try{
     const res=await fetch(`/api/jobs/${jobId}/${action}`,{method:'POST'});
     const data=await res.json();
     if(!data.ok) throw new Error(data.error);
-    const labels={enable:'Activated',disable:'Deactivated',delete:'Deleted','add-logging':'Logging enabled','remove-logging':'Logging disabled','clear-logs':'Logs cleared'};
+    const labels={enable:'Activated',disable:'Deactivated',delete:'Deleted','add-logging':'Logging enabled','remove-logging':'Logging disabled','clear-logs':'Logs cleared','remove-logpath':'Log file removed'};
     showToast((labels[action]||action)+' successfully','ok');
     await loadJobs(true);
     const job=jobs.find(j=>j.id===jobId);
@@ -764,7 +817,7 @@ function copyText(text,el){
 // ── MODAL HELPERS ─────────────────────────────────────
 function openModal(id){ document.getElementById(id).classList.add('open'); }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeModal('confirm-modal'); closeModal('rename-modal'); }});
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeModal('confirm-modal'); closeModal('rename-modal'); closeModal('logpath-modal'); }});
 document.querySelectorAll('.modal-overlay').forEach(overlay=>{
   overlay.addEventListener('click',e=>{ if(e.target===overlay) closeModal(overlay.id); });
 });
